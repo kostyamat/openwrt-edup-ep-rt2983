@@ -1,0 +1,74 @@
+#!/bin/sh
+
+# ====================================================================
+# 1. МЕРЕЖА: Зміна IP-адреси LAN
+# ====================================================================
+# Встановлюємо нову адресу з маскою
+uci set network.lan.ipaddr='192.168.2.1/24'
+# На випадок, якщо стандартний генератор додав стару маску окремим полем
+uci del network.lan.netmask 2>/dev/null 
+
+# ====================================================================
+# 2. МЕРЕЖА: DNS на WAN
+# ====================================================================
+uci set network.wan.peerdns='0'
+uci del_list network.wan.dns 2>/dev/null
+uci add_list network.wan.dns='1.1.1.1'
+uci add_list network.wan.dns='8.8.8.8'
+
+# ====================================================================
+# 3. ДОСТУП: SSH/SFTP
+# ====================================================================
+uci set dropbear.@dropbear[0].PasswordAuth='on'
+uci set dropbear.@dropbear[0].RootPasswordAuth='on'
+
+# ====================================================================
+# 4. СУМІСНІСТЬ: Заглушка iptables
+# ====================================================================
+if [ ! -f /usr/sbin/iptables ]; then
+    echo '#!/bin/sh' > /usr/sbin/iptables
+    echo 'exit 0' >> /usr/sbin/iptables
+    chmod +x /usr/sbin/iptables
+    cp /usr/sbin/iptables /usr/sbin/ip6tables
+fi
+
+# ====================================================================
+# 5. WI-FI: Без очікування (запускається миттєво)
+# ====================================================================
+# Унікальний суфікс з MAC-адреси
+MAC_CLEAN=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' | tr 'a-z' 'A-Z')
+[ -z "$MAC_CLEAN" ] && MAC_CLEAN=$(cat /sys/class/net/br-lan/address 2>/dev/null | tr -d ':' | tr 'a-z' 'A-Z')
+SUFFIX=$(echo "$MAC_CLEAN" | grep -o '....$')
+[ -z "$SUFFIX" ] && SUFFIX="XXXX"
+
+# Вмикаємо всі радіо
+for r in $(uci show wireless | grep "=wifi-device" | cut -d. -f2 | cut -d= -f1); do
+    uci set wireless.$r.disabled='0'
+done
+
+# Вмикаємо всі інтерфейси та задаємо пароль
+for i in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+    uci set wireless.$i.disabled='0'
+    uci set wireless.$i.encryption='psk2'
+    uci set wireless.$i.key='12345678'
+done
+
+# Призначаємо SSID
+if uci -q get wireless.default_radio0 > /dev/null; then
+    uci set wireless.default_radio0.ssid="EDUP_2.4G_${SUFFIX}"
+fi
+if uci -q get wireless.default_radio1 > /dev/null; then
+    uci set wireless.default_radio1.ssid="EDUP_5G_${SUFFIX}"
+fi
+
+# ====================================================================
+# 6. ЗБЕРЕЖЕННЯ І ФІНАЛІЗАЦІЯ
+# ====================================================================
+uci commit network
+uci commit dropbear
+uci commit wireless
+
+# Оскільки це uci-defaults, система САМА перезавантажить мережу та Wi-Fi
+# після завершення скрипта. Команди `wifi up` чи перезавантаження сервісів не потрібні.
+
+exit 0
