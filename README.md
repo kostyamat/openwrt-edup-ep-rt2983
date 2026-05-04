@@ -1,4 +1,4 @@
-# 🚀 EDUP EP-RT2983 Custom OpenWrt Release
+# 🚀 EDUP EP-RT2983 Custom OpenWrt v25.12.2 Release
 
 [🇺🇸 English](#english) | [🇺🇦 Українська](#українська)
 
