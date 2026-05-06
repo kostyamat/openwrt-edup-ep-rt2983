@@ -45,7 +45,6 @@ Compiled using the official OpenWrt Image Builder with injected `uci-defaults` s
 *   **Web Interface (LuCI):** Pre-installed with HTTPS (`luci-ssl`) and `luci-app-usteer` for visual band steering management.
 *   **DNS:** Pre-configured WAN DNS to `1.1.1.1` and `8.8.8.8`.
 *   **SSH/SFTP:** Root login with password authentication is enabled by default.
-*   **System Stability:** Includes a custom `iptables` dummy script to prevent system crashes specific to some EDUP hardware revisions.
 
 ---
 
@@ -82,4 +81,3 @@ Compiled using the official OpenWrt Image Builder with injected `uci-defaults` s
 *   **Веб-інтерфейс (LuCI):** Встановлено із підтримкою HTTPS (`luci-ssl`) та модулем `luci-app-usteer` для керування клієнтами Wi-Fi.
 *   **DNS:** Налаштовано WAN DNS на `1.1.1.1` та `8.8.8.8`.
 *   **SSH/SFTP:** Дозволено вхід для користувача root за паролем.
-*   **Стабільність системи:** Додано спеціальну "заглушку" `iptables` для запобігання падінню системи, яке зустрічається на деяких ревізіях EDUP.
