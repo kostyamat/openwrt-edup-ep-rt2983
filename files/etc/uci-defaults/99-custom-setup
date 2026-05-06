@@ -3,9 +3,7 @@
 # ====================================================================
 # 1. МЕРЕЖА: Зміна IP-адреси LAN
 # ====================================================================
-# Встановлюємо нову адресу з маскою
 uci set network.lan.ipaddr='192.168.2.1/24'
-# На випадок, якщо стандартний генератор додав стару маску окремим полем
 uci del network.lan.netmask 2>/dev/null 
 
 # ====================================================================
@@ -23,17 +21,7 @@ uci set dropbear.@dropbear[0].PasswordAuth='on'
 uci set dropbear.@dropbear[0].RootPasswordAuth='on'
 
 # ====================================================================
-# 4. СУМІСНІСТЬ: Заглушка iptables
-# ====================================================================
-if [ ! -f /usr/sbin/iptables ]; then
-    echo '#!/bin/sh' > /usr/sbin/iptables
-    echo 'exit 0' >> /usr/sbin/iptables
-    chmod +x /usr/sbin/iptables
-    cp /usr/sbin/iptables /usr/sbin/ip6tables
-fi
-
-# ====================================================================
-# 5. WI-FI: Без очікування (запускається миттєво)
+# 4. WI-FI: Єдина мережа (Single SSID), Роумінг та Mesh
 # ====================================================================
 # Унікальний суфікс з MAC-адреси
 MAC_CLEAN=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' | tr 'a-z' 'A-Z')
@@ -41,34 +29,53 @@ MAC_CLEAN=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' | tr 'a-z' '
 SUFFIX=$(echo "$MAC_CLEAN" | grep -o '....$')
 [ -z "$SUFFIX" ] && SUFFIX="XXXX"
 
-# Вмикаємо всі радіо
+# Дані твоєї мережі
+WIFI_SSID="EDUP_${SUFFIX}"
+WIFI_PASS="12345678"
+
+# Mobility Domain (MDID) має бути однаковим на всіх роутерах у Mesh-мережі (4 hex-символи)
+MDID="ed00"
+
+# Вмикаємо всі фізичні радіомодулі
 for r in $(uci show wireless | grep "=wifi-device" | cut -d. -f2 | cut -d= -f1); do
     uci set wireless.$r.disabled='0'
 done
 
-# Вмикаємо всі інтерфейси та задаємо пароль
+# Налаштовуємо всі існуючі точки доступу (AP) під ЄДИНУ мережу
 for i in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
-    uci set wireless.$i.disabled='0'
-    uci set wireless.$i.encryption='psk2'
-    uci set wireless.$i.key='12345678'
+    MODE=$(uci -q get wireless.$i.mode)
+    if [ -z "$MODE" ] || [ "$MODE" = "ap" ]; then
+        uci set wireless.$i.disabled='0'
+        uci set wireless.$i.ssid="$WIFI_SSID"
+        uci set wireless.$i.encryption='psk2+ccmp'
+        uci set wireless.$i.key="$WIFI_PASS"
+
+        # Активація безшовного роумінгу (Fast Transition, RRM, BSS Transition)
+        uci set wireless.$i.ieee80211r='1'
+        uci set wireless.$i.mobility_domain="$MDID"
+        uci set wireless.$i.ieee80211k='1'
+        uci set wireless.$i.ieee80211v='1'
+        uci set wireless.$i.bss_transition='1'
+    fi
 done
 
-# Призначаємо SSID
-if uci -q get wireless.default_radio0 > /dev/null; then
-    uci set wireless.default_radio0.ssid="EDUP_2.4G_${SUFFIX}"
-fi
-if uci -q get wireless.default_radio1 > /dev/null; then
-    uci set wireless.default_radio1.ssid="EDUP_5G_${SUFFIX}"
+# Додаємо прихований інтерфейс 802.11s (Mesh) на діапазоні 5GHz (зазвичай radio1)
+if uci -q get wireless.radio1 > /dev/null; then
+    uci set wireless.mesh0='wifi-iface'
+    uci set wireless.mesh0.device='radio1'
+    uci set wireless.mesh0.ifname='mesh0'
+    uci set wireless.mesh0.network='lan'
+    uci set wireless.mesh0.mode='mesh'
+    uci set wireless.mesh0.mesh_id="EDUP_MESH_BACKHAUL"
+    uci set wireless.mesh0.encryption='sae' # WPA3 SAE - стандарт для 802.11s
+    uci set wireless.mesh0.key="$WIFI_PASS"
 fi
 
 # ====================================================================
-# 6. ЗБЕРЕЖЕННЯ І ФІНАЛІЗАЦІЯ
+# 5. ЗБЕРЕЖЕННЯ І ФІНАЛІЗАЦІЯ
 # ====================================================================
 uci commit network
 uci commit dropbear
 uci commit wireless
-
-# Оскільки це uci-defaults, система САМА перезавантажить мережу та Wi-Fi
-# після завершення скрипта. Команди `wifi up` чи перезавантаження сервісів не потрібні.
 
 exit 0
